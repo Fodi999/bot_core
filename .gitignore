@@ -1,0 +1,42 @@
+# Сборочные артефакты Cargo
+/target
+**/*.rlib
+
+# Бинарники
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Файлы IDE
+.idea/
+.vscode/
+*.swp
+
+# MacOS системные файлы
+.DS_Store
+
+# Логи и отладочные файлы
+*.log
+*.tmp
+
+# Настройки среды
+.env
+.env.local
+.env.*
+
+# Файлы кэша
+Cargo.lock
+
+# Бинарные сборки для платформ
+*.a
+*.apk
+*.ipa
+*.wasm
+
+# Web и FFI артефакты
+pkg/
+node_modules/
+
+# Git merge markers
+*.orig

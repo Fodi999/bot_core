@@ -1,4 +1,4 @@
-use reqwest::blocking::get;
+use reqwest;
 use quick_xml::de::from_str;
 use serde::Deserialize;
 
@@ -17,19 +17,30 @@ struct Entry {
 }
 
 /// Ищет статьи на arXiv по запросу и возвращает заголовки с ссылками
-pub fn search_arxiv(query: &str, max_results: usize) -> Result<Vec<(String, String)>, String> {
+pub async fn search_arxiv(query: &str, max_results: usize) -> Result<Vec<(String, String)>, Box<dyn std::error::Error>> {
     let url = format!(
         "https://export.arxiv.org/api/query?search_query=all:{}&start=0&max_results={}",
         query.replace(" ", "+"),
         max_results
     );
 
-    let body = get(&url)
-        .map_err(|e| format!("Ошибка запроса arXiv: {}", e))?
-        .text()
-        .map_err(|e| format!("Ошибка чтения ответа arXiv: {}", e))?;
+    let client = reqwest::Client::new();
+    let response = client
+        .get(&url)
+        .header("User-Agent", "Bot-Auraya/1.0")
+        .send()
+        .await?;
 
-    let feed: Feed = from_str(&body).map_err(|e| format!("Ошибка парсинга XML: {}", e))?;
+    if !response.status().is_success() {
+        return Err(format!("arXiv API returned status: {}", response.status()).into());
+    }
+
+    let body = response.text().await?;
+    let feed: Feed = from_str(&body)?;
+
+    if feed.entries.is_empty() {
+        return Err("No arXiv articles found".into());
+    }
 
     Ok(feed
         .entries

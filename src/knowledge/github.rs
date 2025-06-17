@@ -28,8 +28,12 @@ pub async fn search_github_repos(query: &str, max_results: usize) -> Result<Vec<
             }
         }
         
+        if repos.is_empty() {
+            return Err("No repositories found".into());
+        }
+        
         Ok(repos)
     } else {
-        Ok(vec![])
+        Err(format!("GitHub API returned status: {}", response.status()).into())
     }
 }

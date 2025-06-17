@@ -14,12 +14,25 @@ struct Translation {
 
 /// Перевод текста на указанный язык (`EN`, `RU`, `FR`, и т.д.)
 pub async fn translate_text(text: &str, target_lang: &str) -> Result<String, String> {
-    let api_key = env::var("DEEPL_API_KEY").map_err(|e| format!("DEEPL_API_KEY: {}", e))?;
+    // Проверяем наличие API ключа
+    let api_key = match env::var("DEEPL_API_KEY") {
+        Ok(key) if !key.is_empty() => key,
+        _ => {
+            println!("⚠️ DEEPL_API_KEY не найден или пуст - переводчик отключен");
+            return Err("DeepL API ключ недоступен".to_string());
+        }
+    };
+
     let url = "https://api-free.deepl.com/v2/translate";
 
-    let client = Client::new();
+    let client = Client::builder()
+        .timeout(std::time::Duration::from_secs(10)) // Тайм-аут 10 секунд
+        .build()
+        .map_err(|e| format!("Ошибка создания HTTP клиента: {}", e))?;
+
     let response = client
         .post(url)
+        .header("User-Agent", "Bot-Auraya/1.0")
         .form(&[
             ("auth_key", api_key.as_str()),
             ("text", text),
@@ -29,14 +42,45 @@ pub async fn translate_text(text: &str, target_lang: &str) -> Result<String, Str
         .await
         .map_err(|e| format!("Запрос DeepL не удался: {}", e))?;
 
-    let data: DeepLTranslation = response
-        .json()
-        .await
-        .map_err(|e| format!("Ошибка парсинга JSON DeepL: {}", e))?;
+    // Проверяем статус ответа
+    if !response.status().is_success() {
+        let status = response.status();
+        let error_text = response.text().await.unwrap_or_default();
+        return Err(format!("DeepL API ошибка {}: {}", status, error_text));
+    }
 
-    Ok(data
-        .translations
-        .first()
-        .map(|t| t.text.clone())
-        .unwrap_or_else(|| "Ошибка: перевод отсутствует".into()))
+    let response_text = response.text().await
+        .map_err(|e| format!("Ошибка чтения ответа DeepL: {}", e))?;
+
+    // Логируем ответ для отладки (только первые 200 символов)
+    println!("🔍 DeepL ответ: {}", &response_text[..response_text.len().min(200)]);
+
+    let data: DeepLTranslation = serde_json::from_str(&response_text)
+        .map_err(|e| format!("Ошибка парсинга JSON DeepL: {} | Ответ: {}", e, response_text))?;
+
+    if data.translations.is_empty() {
+        return Err("DeepL вернул пустой список переводов".to_string());
+    }
+
+    Ok(data.translations[0].text.clone())
+}
+
+/// Упрощенный переводчик-заглушка для случаев, когда DeepL недоступен
+pub fn simple_translate_fallback(text: &str, target_lang: &str) -> String {
+    match target_lang {
+        "RU" => {
+            // Простейшие замены для демонстрации
+            text.replace("Hello", "Привет")
+                .replace("Thank you", "Спасибо")
+                .replace("Goodbye", "До свидания")
+                .replace("Error", "Ошибка")
+        }
+        "EN" => {
+            text.replace("Привет", "Hello")
+                .replace("Спасибо", "Thank you")
+                .replace("До свидания", "Goodbye")
+                .replace("Ошибка", "Error")
+        }
+        _ => text.to_string() // Возвращаем оригинал для неподдерживаемых языков
+    }
 }

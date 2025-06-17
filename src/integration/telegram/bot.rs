@@ -1,9 +1,8 @@
 use teloxide::{prelude::*, utils::command::BotCommands};
-use crate::integration::telegram::handler::handle_command;
+use crate::integration::telegram::handler::{handle_command, handle_message};
 
-/// Telegram-команды, доступные пользователю
 #[derive(BotCommands, Clone)]
-#[command(rename_rule = "lowercase", description = "Список команд:")]
+#[command(rename_rule = "lowercase", description = "Telegram-команды, доступные пользователю")]
 pub enum Command {
     #[command(description = "Показать справку")]
     Help,
@@ -13,11 +12,28 @@ pub enum Command {
     Ask(String),
 }
 
-/// Инициализация и запуск Telegram-бота
 pub async fn run_bot() {
-    log::info!("🤖 Telegram-бот запущен...");
+    // Убираем инициализацию логгера - она уже есть в main.rs
+    log::info!("Запуск бота...");
 
     let bot = Bot::from_env();
 
-    Command::repl(bot, handle_command).await;
+    Dispatcher::builder(
+        bot,
+        Update::filter_message()
+            .branch(
+                dptree::entry()
+                    .filter_command::<Command>()
+                    .endpoint(handle_command), // Обработка команд
+            )
+            .branch(
+                dptree::filter(|msg: Message| !msg.text().unwrap_or("").starts_with('/'))
+                    .endpoint(handle_message), // Обработка обычных сообщений
+            ),
+    )
+    .dependencies(dptree::deps![])
+    .enable_ctrlc_handler()
+    .build()
+    .dispatch()
+    .await;
 }

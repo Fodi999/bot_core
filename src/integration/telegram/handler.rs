@@ -14,7 +14,7 @@ fn get_chat_states() -> &'static Mutex<HashMap<ChatId, DialogContext>> {
     CHAT_STATES.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-/// Обрабатывает Telegram-команду и отправляет ответ пользователю
+/// Обрабатывает команды бота
 pub async fn handle_command(bot: Bot, msg: Message, cmd: Command) -> ResponseResult<()> {
     let chat_id = msg.chat.id;
 
@@ -25,7 +25,6 @@ pub async fn handle_command(bot: Bot, msg: Message, cmd: Command) -> ResponseRes
         }
 
         Command::Start => {
-            // Создаем новый контекст диалога для пользователя
             let mut states = get_chat_states().lock().await;
             states.insert(chat_id, DialogContext::new());
             
@@ -35,7 +34,10 @@ pub async fn handle_command(bot: Bot, msg: Message, cmd: Command) -> ResponseRes
                 • Поиском репозиториев на GitHub\n\
                 • Переводом текста\n\
                 • И многим другим!\n\n\
-                Используй команду /ask <вопрос>, например:\n/ask Что такое Rust?";
+                Теперь можете просто писать мне сообщения без команд! 💬\n\
+                Или используйте команды:\n\
+                /ask <вопрос> - задать конкретный вопрос\n\
+                /help - показать справку";
             
             bot.send_message(chat_id, welcome_text).await?;
         }
@@ -47,15 +49,34 @@ pub async fn handle_command(bot: Bot, msg: Message, cmd: Command) -> ResponseRes
                 return Ok(());
             }
 
-            // Получаем или создаем контекст диалога
             let mut states = get_chat_states().lock().await;
             let dialog = states.entry(chat_id).or_insert_with(DialogContext::new);
             
-            // Генерируем ответ с помощью умной логики
             let reply = smart_answer_multilang(&question, dialog).await;
-            
             bot.send_message(chat_id, reply).await?;
         }
+    }
+
+    Ok(())
+}
+
+/// Обрабатывает обычные текстовые сообщения (без команд)
+pub async fn handle_message(bot: Bot, msg: Message) -> ResponseResult<()> {
+    let chat_id = msg.chat.id;
+    
+    // Получаем текст сообщения
+    if let Some(text) = msg.text() {
+        // Показываем, что бот печатает
+        bot.send_chat_action(chat_id, teloxide::types::ChatAction::Typing).await?;
+        
+        // Получаем или создаем контекст диалога
+        let mut states = get_chat_states().lock().await;
+        let dialog = states.entry(chat_id).or_insert_with(DialogContext::new);
+        
+        // Генерируем ответ как ИИ-ассистент
+        let reply = smart_answer_multilang(text, dialog).await;
+        
+        bot.send_message(chat_id, reply).await?;
     }
 
     Ok(())
